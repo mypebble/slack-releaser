@@ -70,18 +70,11 @@ def post_to_slack(data):
 
     changelog = '\n'.join(s for s in search_lines[:end] if s)
 
-    version_string = '''# {app}
-
-**Url** <{url}>
-## {version}
-
-{changes}'''.format(app=app_name, version=version, changes=changelog,
-                    url=tag_url)
-
     payload = {
         'attachments': [
             {
-                'fallback': version_string,
+                'fallback': _get_fallback_string(app_name, version, changelog,
+                                                 tag_url),
                 'color': '#228b22',
                 'author_name': user,
                 'title': 'Release {} - {}'.format(app_name, version),
@@ -103,8 +96,23 @@ def post_to_slack(data):
     try:
         ret.raise_for_status()
     except requests.exceptions.HTTPError as exc:
-        error_text = ('Slack returned the following error code: {code} '
-                      'and message: {message}'.format(
-                          code=ret.status_code,
-                          message=exc.text))
-        raise ConfigError(error_text)
+        if ret.status_code in (400, 500):
+            error_text = ('Slack returned the following error code: {code} '
+                          'and message: {message}'.format(
+                              code=ret.status_code,
+                              message=exc.text))
+            raise ConfigError(error_text)
+        else:
+            print('Could not sent to Slack. Continuing release.')
+
+
+def _get_fallback_string(app_name, version, changelog, tag_url):
+    """Return the Fallback String.
+    """
+    return '''# {app}
+
+**Url** <{url}>
+# {version}
+
+{changes}'''.format(app=app_name, version=version, changes=changelog,
+                    url=tag_url)
