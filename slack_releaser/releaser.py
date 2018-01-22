@@ -7,12 +7,13 @@ import getpass
 import re
 
 from os import path
+from time import time
 
 import requests
 
 from .exceptions import ConfigError, RequestError
 
-VERSION_REGEX = re.compile(r'\s\d+\.\d+\.\d+\s')
+VERSION_REGEX = re.compile(r'\s*\d+\.\d+\.\d+\s')
 
 SETUP_CONFIG_HELP = '''Your setup.cfg file must contain the following info:
 
@@ -38,7 +39,7 @@ def post_to_slack(data):
     app_name = data['name']
     version = data['new_version']
     major, minor, patch = version.split('.')
-    search_lines = [line for line in data['history_lines'][1:]]
+    search_lines = data['history_lines'][1:]
     user = getpass.getuser()
 
     config = configparser.ConfigParser()
@@ -64,11 +65,11 @@ def post_to_slack(data):
     end = len(search_lines) - 1
 
     for i, line in enumerate(search_lines):
-        if line.startswith('#') or VERSION_REGEX.findall(line):
+        if VERSION_REGEX.findall(line):
             end = i
             break
 
-    changelog = '\n'.join(s for s in search_lines[:end] if s)
+    changelog = '\n'.join(s for s in search_lines[:end] if _keep_line(s))
 
     payload = {
         'attachments': [
@@ -81,7 +82,7 @@ def post_to_slack(data):
                 'pretext': 'Build Released',
                 'title': '{} {}'.format(app_name, version),
                 'title_link': tag_url,
-
+                'ts': int(time()),
                 'fields': [
                     {
                         'title': 'Release contains',
@@ -103,7 +104,7 @@ def post_to_slack(data):
                               message=exc.text))
             raise ConfigError(error_text)
         else:
-            print('Could not sent to Slack. Continuing release.')
+            print('Could not send to Slack. Continuing release.')
 
 
 def _get_fallback_string(app_name, version, changelog, tag_url):
@@ -116,3 +117,9 @@ def _get_fallback_string(app_name, version, changelog, tag_url):
 
 {changes}'''.format(app=app_name, version=version, changes=changelog,
                     url=tag_url)
+
+
+def _keep_line(line):
+    """Return whether to keep the given line in the output.
+    """
+    return line.strip() and not {'-', '='} >= set(line)
