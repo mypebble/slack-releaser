@@ -3,6 +3,7 @@
 from __future__ import absolute_import, print_function, unicode_literals
 
 import configparser
+import getpass
 import re
 
 from os import path
@@ -38,6 +39,7 @@ def post_to_slack(data):
     version = data['new_version']
     major, minor, patch = version.split('.')
     search_lines = [line for line in data['history_lines'][1:]]
+    user = getpass.getuser()
 
     config = configparser.ConfigParser()
 
@@ -57,6 +59,8 @@ def post_to_slack(data):
     webhook = options['webhook']
     repo = options['repository']
 
+    tag_url = '{}/tree/{}'.format(repo, version)
+
     end = len(search_lines) - 1
 
     for i, line in enumerate(search_lines):
@@ -72,11 +76,29 @@ def post_to_slack(data):
 ## {version}
 
 {changes}'''.format(app=app_name, version=version, changes=changelog,
-                    url='{}/tree/{}'.format(repo, version))
+                    url=tag_url)
 
-    ret = requests.post(webhook,
-                        json={'text': version_string,
-                              'username': app_name})
+    payload = {
+        'attachments': [
+            {
+                'fallback': version_string,
+                'color': '#228b22',
+                'author_name': user,
+                'title': 'Release {} - {}'.format(app_name, version),
+                'pretext': 'Build Released',
+                'title': '{} {}'.format(app_name, version),
+                'title_link': tag_url,
+
+                'fields': [
+                    {
+                        'title': 'Release contains',
+                        'value': changelog,
+                        'short': False,
+                    }
+                ]}
+        ]
+    }
+    ret = requests.post(webhook, json=payload)
 
     try:
         ret.raise_for_status()
